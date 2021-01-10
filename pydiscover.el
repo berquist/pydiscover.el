@@ -42,6 +42,21 @@
 (defcustom pydiscover-sep ":"
   "Display separator")
 
+(defcustom pydiscover-virtualenvwrapper-ignore-names
+  '("get_env_details"
+    "initialize"
+    "postactivate"
+    "postdeactivate"
+    "postmkproject"
+    "postmkvirtualenv"
+    "postrmvirtualenv"
+    "preactivate"
+    "predeactivate"
+    "premkproject"
+    "premkvirtualenv"
+    "prermvirtualenv")
+  "Names to ignore in the virtualenvwrapper root (WORKON_HOME)")
+
 (defun get-candidate-python-interpreters (dir)
   "Find all candidate `pythonX.Y' interpreters in a directory."
   (directory-files
@@ -66,10 +81,27 @@
    (filter-pyenv-shim-dirs (get-path-components))))
 
 (defun get-virtualenvwrapper-dir ()
+  "Get the base directory containing venvs for virtualenvwrapper.
+
+If one doesn't exist, returns nil."
   (getenv "WORKON_HOME"))
 
+(defun get-virtualenvwrapper-paths ()
+  "Get the full path to each venv under virtualenvwrapper."
+  (let ((virtualenvwrapper-dir (get-virtualenvwrapper-dir)))
+    (if virtualenvwrapper-dir
+        (cl-map
+         'list
+         (lambda (envname) (format "%s/%s" virtualenvwrapper-dir envname))
+         (seq-filter
+          '(lambda (envname)
+            (not (member envname pydiscover-virtualenvwrapper-ignore-names)))
+          (directory-files virtualenvwrapper-dir nil directory-files-no-dot-files-regexp))))))
+
 (defun get-pyenv-dir ()
-  "Figure out the base directory containing a pyenv install."
+  "Figure out the base directory containing a pyenv install.
+
+If one doesn't exist, returns nil."
   (let ((pyenv-dir-user-1 (getenv "PYENV_ROOT"))
         (pyenv-dir-user-2 (getenv "PYENV"))
         (pyenv-dir-win (expand-file-name "~/.pyenv/pyenv-win"))
@@ -109,6 +141,7 @@
 
 ;; TODO
 (defun detect-env-type (dir)
+  "Given the base directory of an environment, figure out what kind of environment it is."
   (if (file-exists-p dir)
       (cond
         (t 'system))))
@@ -117,6 +150,14 @@
   `(:env-type ,(if (not (null env-type)) env-type (detect-env-type dir))
     :env-name ,(file-name-nondirectory dir)
     :env-full-base-path ,dir))
+
+(defun get-virtualenvwrapper-environments ()
+  "Get records for all virtualenvwrapper environments."
+  (let ((virtualenvwrapper-dir (get-virtualenvwrapper-dir)))
+    (if virtualenvwrapper-dir
+        (cl-map 'list
+                (lambda (dir) (make-record-from-dir dir 'virtualenvwrapper))
+                (get-virtualenvwrapper-paths)))))
 
 (defun get-pyenv-environments ()
   "Get records for all pyenv environments."
@@ -138,6 +179,7 @@
   "Get records for all discovered environments."
   (cl-concatenate
    'list
+   (get-virtualenvwrapper-environments)
    (get-pyenv-environments)
    (get-conda-environments)))
 
