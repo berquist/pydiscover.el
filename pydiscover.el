@@ -29,9 +29,58 @@
 ;;
 ;;; Commentary:
 ;;
-;; TODO: write commentary
+;; It supports discovering the following kinds of Python interpreters and
+;; environments:
+;;  - system installs (TODO)
+;;  - virtualenv / venv (TODO)
+;;  - pipenv (TODO)
+;;  - conda (TODO)
+;;  - pyenv (TODO)
 
 ;;; Code:
+
+
+;; WORKON_HOME
+;; ANACONDA_HOME
+
+
+(defun get-candidate-python-interpreters (dir)
+  "Find all candidate `pythonX.Y' interpreters in a directory."
+  (directory-files
+   dir
+   t
+   "^python\\([[:digit:]]\\(\.[[:digit:]]\\)?\\)?$"))
+
+
+(defun get-candidiate-python-interpreters-in-path ()
+  "Find all candidate `pythonX.Y' interpreters in the $PATH."
+  (mapcan
+   'get-candidate-python-interpreters
+   (split-string (getenv "PATH") path-separator)))
+
+
+(defun get-pyenv-dir ()
+  "Figure out the base directory containing a pyenv install."
+  (let ((pyenv-dir-user-1 (getenv "PYENV_ROOT"))
+        (pyenv-dir-user-2 (getenv "PYENV"))
+        (pyenv-dir-win "~/.pyenv/pyenv-win")
+        (pyenv-dir-nix "~/.pyenv"))
+    (cond
+      ((and (not (null pyenv-dir-user-1))
+            (file-directory-p pyenv-dir-user-1)) pyenv-dir-user-1)
+      ((and (not (null pyenv-dir-user-2))
+            (file-directory-p pyenv-dir-user-2)) pyenv-dir-user-2)
+      ((file-directory-p pyenv-dir-win) pyenv-dir-win)
+      ((file-directory-p pyenv-dir-nix) pyenv-dir-nix)
+      (t nil))))
+
+
+;; TODO proper path separators
+(defun get-pyenv-versions (dir)
+  (directory-files
+   (format "%s/versions/" dir)
+   nil
+   directory-files-no-dot-files-regexp))
 
 
 ;; TODO: Helper-functions go here (if any)
