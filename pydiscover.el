@@ -142,11 +142,17 @@
    (get-conda-environments)))
 
 (defun list-base-directories ()
+  (interactive)
   (with-output-to-temp-buffer
     "*pydiscover*"
     (princ
      (string-join
-      (cl-map 'list (lambda (dir) (format "%s" dir)) (get-base-directories))
+      (cl-map 'list
+              (lambda (dir)
+                (format "%s:%s"
+                        (plist-get dir :env-type)
+                        (plist-get dir :env-name)))
+              (get-base-directories))
       "\n"))))
 
 ;;;###autoload
