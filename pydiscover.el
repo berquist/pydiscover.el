@@ -51,13 +51,21 @@
    t
    "^python\\([[:digit:]]\\(\.[[:digit:]]\\)?\\)?$"))
 
+(defun get-path-components ()
+  (split-string (getenv "PATH") path-separator))
+
+(defun filter-pyenv-shim-dirs (dirs)
+  "Remove all pyenv shim directories from `dirs'."
+  (seq-filter
+   '(lambda (dir)
+     (not (string= (file-name-base dir) "shims")))
+   dirs))
 
 (defun get-candidiate-python-interpreters-in-path ()
   "Find all candidate `pythonX.Y' interpreters in the $PATH."
   (mapcan
    'get-candidate-python-interpreters
-   (split-string (getenv "PATH") path-separator)))
-
+   (filter-pyenv-shim-dirs (get-path-components))))
 
 (defun get-pyenv-dir ()
   "Figure out the base directory containing a pyenv install."
@@ -73,7 +81,6 @@
       ((file-directory-p pyenv-dir-win) pyenv-dir-win)
       ((file-directory-p pyenv-dir-nix) pyenv-dir-nix)
       (t nil))))
-
 
 ;; TODO proper path separators
 (defun get-pyenv-versions (dir)
