@@ -114,9 +114,9 @@
 ;; TODO the `file-name-base' accidentally removes version bits that are in the
 ;; "extension" position
 (defun make-record-from-dir (dir &optional env-type)
-  `(:env-full-base-path ,dir
+  `(:env-type ,(if (not (null env-type)) env-type (detect-env-type dir))
     :env-name ,(file-name-base dir)
-    :env-type ,(if (not (null env-type)) env-type (detect-env-type dir))))
+    :env-full-base-path ,dir))
 
 (defun get-pyenv-environments ()
   "Get records for all pyenv environments."
@@ -140,6 +140,14 @@
    'list
    (get-pyenv-environments)
    (get-conda-environments)))
+
+(defun list-base-directories ()
+  (with-output-to-temp-buffer
+    "*pydiscover*"
+    (princ
+     (string-join
+      (cl-map 'list (lambda (dir) (format "%s" dir)) (get-base-directories))
+      "\n"))))
 
 ;;;###autoload
 ;; TODO: Entry-function goes here
