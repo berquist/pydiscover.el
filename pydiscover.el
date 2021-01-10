@@ -89,6 +89,19 @@
    nil
    directory-files-no-dot-files-regexp))
 
+(defun slurp (filename)
+  "https://stackoverflow.com/a/20747279/"
+  (with-temp-buffer
+      (insert-file-contents-literally filename)
+    (buffer-string)))
+
+(defun slurp-lines (filename)
+  (split-string (slurp filename) "\n"))
+
+(defun read-conda-environments-file ()
+  (let ((conda-environments-filename "~/.conda/environments.txt"))
+    (if (file-exists-p conda-environments-filename)
+        (slurp-lines conda-environments-filename))))
 
 ;; TODO: Helper-functions go here (if any)
 
