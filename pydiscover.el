@@ -34,14 +34,10 @@
 ;;  - system installs (TODO)
 ;;  - virtualenv / venv (TODO)
 ;;  - pipenv (TODO)
-;;  - conda (TODO)
 ;;  - pyenv (TODO)
+;;  - conda (TODO)
 
 ;;; Code:
-
-
-;; WORKON_HOME
-;; ANACONDA_HOME
 
 
 (defun get-candidate-python-interpreters (dir)
@@ -67,17 +63,22 @@
    'get-candidate-python-interpreters
    (filter-pyenv-shim-dirs (get-path-components))))
 
+(defun get-virtualenvwrapper-dir ()
+  (getenv "WORKON_HOME"))
+
 (defun get-pyenv-dir ()
   "Figure out the base directory containing a pyenv install."
   (let ((pyenv-dir-user-1 (getenv "PYENV_ROOT"))
         (pyenv-dir-user-2 (getenv "PYENV"))
-        (pyenv-dir-win "~/.pyenv/pyenv-win")
-        (pyenv-dir-nix "~/.pyenv"))
+        (pyenv-dir-win (expand-file-name "~/.pyenv/pyenv-win"))
+        (pyenv-dir-nix (expand-file-name "~/.pyenv")))
     (cond
       ((and (not (null pyenv-dir-user-1))
-            (file-directory-p pyenv-dir-user-1)) pyenv-dir-user-1)
+            (file-directory-p pyenv-dir-user-1))
+       (expand-file-name pyenv-dir-user-1))
       ((and (not (null pyenv-dir-user-2))
-            (file-directory-p pyenv-dir-user-2)) pyenv-dir-user-2)
+            (file-directory-p pyenv-dir-user-2))
+       (expand-file-name pyenv-dir-user-2))
       ((file-directory-p pyenv-dir-win) pyenv-dir-win)
       ((file-directory-p pyenv-dir-nix) pyenv-dir-nix)
       (t nil))))
@@ -99,12 +100,46 @@
   (split-string (slurp filename) "\n"))
 
 (defun read-conda-environments-file ()
-  (let ((conda-environments-filename "~/.conda/environments.txt"))
+  (let ((conda-environments-filename
+          (expand-file-name "~/.conda/environments.txt")))
     (if (file-exists-p conda-environments-filename)
         (slurp-lines conda-environments-filename))))
 
-;; TODO: Helper-functions go here (if any)
+;; TODO
+(defun detect-env-type (dir)
+  (if (file-exists-p dir)
+      (cond
+        (t 'system))))
 
+;; TODO the `file-name-base' accidentally removes version bits that are in the
+;; "extension" position
+(defun make-record-from-dir (dir &optional env-type)
+  `(:env-full-base-path ,dir
+    :env-name ,(file-name-base dir)
+    :env-type ,(if (not (null env-type)) env-type (detect-env-type dir))))
+
+(defun get-pyenv-environments ()
+  "Get records for all pyenv environments."
+  (let ((pyenv-dir (get-pyenv-dir)))
+    (if pyenv-dir
+        (cl-map 'list
+                (lambda (dir) (make-record-from-dir dir 'pyenv))
+                (get-pyenv-versions pyenv-dir)))))
+
+(defun get-conda-environments ()
+  "Get records for all conda environments."
+  (let ((conda-environment-dirs (read-conda-environments-file)))
+    (if conda-environment-dirs
+        (cl-map 'list
+                (lambda (dir) (make-record-from-dir dir 'conda))
+                conda-environment-dirs))))
+
+(defun get-base-directories ()
+  "Get records for all discovered environments."
+  (cl-concatenate
+   'list
+   (get-pyenv-environments)
+   (get-conda-environments)))
 
 ;;;###autoload
 ;; TODO: Entry-function goes here
