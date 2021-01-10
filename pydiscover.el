@@ -39,6 +39,8 @@
 
 ;;; Code:
 
+(defcustom pydiscover-sep ":"
+  "Display separator")
 
 (defun get-candidate-python-interpreters (dir)
   "Find all candidate `pythonX.Y' interpreters in a directory."
@@ -149,8 +151,9 @@
      (string-join
       (cl-map 'list
               (lambda (dir)
-                (format "%s:%s"
+                (format "%s%s%s"
                         (plist-get dir :env-type)
+                        pydiscover-sep
                         (plist-get dir :env-name)))
               (get-base-directories))
       "\n"))))
