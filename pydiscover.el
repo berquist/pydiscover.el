@@ -113,11 +113,9 @@
       (cond
         (t 'system))))
 
-;; TODO the `file-name-base' accidentally removes version bits that are in the
-;; "extension" position
 (defun make-record-from-dir (dir &optional env-type)
   `(:env-type ,(if (not (null env-type)) env-type (detect-env-type dir))
-    :env-name ,(file-name-base dir)
+    :env-name ,(file-name-nondirectory dir)
     :env-full-base-path ,dir))
 
 (defun get-pyenv-environments ()
