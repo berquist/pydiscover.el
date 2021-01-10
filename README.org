@@ -1,0 +1,45 @@
+* pydiscover
+
+# [![Build Status](https://travis-ci.org//pydiscover.svg?branch=master)](https://travis-ci.org//pydiscover) [![MELPA Stable](https://stable.melpa.org/packages/pydiscover-badge.svg)](https://stable.melpa.org/#/pydiscover) [![MELPA](http://melpa.org/packages/pydiscover-badge.svg)](http://melpa.org/#/pydiscover)
+
+#+begin_quote
+Discover all possible Python environments on your system
+#+end_quote
+
+** Install
+
+From [[https://melpa.org/][MELPA]]
+
+#+begin_src emacs-lisp
+(use-package pydiscover
+  :ensure t
+  ;; TODO: write config, if any
+  :config ())
+#+end_src
+
+Or manually, after downloading into your =load-path=
+
+#+begin_src emacs-lisp
+(require 'pydiscover)
+;; TODO: write config, if any
+#+end_src
+
+** Use
+
+TODO
+
+# ** Example
+
+# [[https://raw.githubusercontent.com//pydiscover/master/img/demo.{TODO: set filetype png,gif}][TODO: set hover-text]]
+
+** Related
+
+TODO
+
+** Acknowledgments
+
+TODO
+
+** License
+
+GPL 2 (or higher) © [[http://www.fsf.org/about][Free Software Foundation, Inc]].
