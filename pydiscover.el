@@ -65,20 +65,36 @@
    "^python\\([[:digit:]]\\(\.[[:digit:]]\\)?\\)?$"))
 
 (defun get-path-components ()
-  (split-string (getenv "PATH") path-separator))
+  (delete-dups (split-string (getenv "PATH") path-separator)))
 
 (defun filter-pyenv-shim-dirs (dirs)
   "Remove all pyenv shim directories from `dirs'."
   (seq-filter
    '(lambda (dir)
+      ;; TODO switch to "begins with PYENV_ROOT"
      (not (string= (file-name-base dir) "shims")))
    dirs))
 
-(defun get-candidiate-python-interpreters-in-path ()
-  "Find all candidate `pythonX.Y' interpreters in the $PATH."
+(defun get-candidate-python-interpreters-in-path ()
+  "Find all candidate `pythonX.Y' interpreters in the $PATH.
+
+This is used to discover system directories.
+
+TODO this doesn't filter out if a conda env is already on the
+path.
+"
   (mapcan
    'get-candidate-python-interpreters
    (filter-pyenv-shim-dirs (get-path-components))))
+
+(defun get-system-dirs ()
+  (delete-dups
+   (cl-map
+    'list
+    (lambda (interp)
+      (expand-file-name
+       (string-join `(,(file-name-directory interp) ".."))))
+    (get-candidate-python-interpreters-in-path))))
 
 (defun get-virtualenvwrapper-dir ()
   "Get the base directory containing venvs for virtualenvwrapper.
