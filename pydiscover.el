@@ -31,16 +31,22 @@
 ;;
 ;; It supports discovering the following kinds of Python interpreters and
 ;; environments:
-;;  - system installs (TODO)
-;;  - virtualenv / venv (TODO)
-;;  - pipenv (TODO)
-;;  - pyenv (TODO)
-;;  - conda (TODO)
+;;  - system installs
+;;  - virtualenv / venv
+;;  - pipenv
+;;  - pyenv
+;;  - conda
 
 ;;; Code:
 
+(defgroup pydiscover nil
+  "Python interpreter and environment discovery and management for Emacs."
+  :group 'python)
+
 (defcustom pydiscover-sep ":"
-  "Display separator")
+  "Display separator"
+  :type 'string
+  :group 'pydiscover)
 
 (defcustom pydiscover-virtualenvwrapper-ignore-names
   '("get_env_details"
@@ -55,7 +61,9 @@
     "premkproject"
     "premkvirtualenv"
     "prermvirtualenv")
-  "Names to ignore in the virtualenvwrapper root (WORKON_HOME)")
+  "Names to ignore in the virtualenvwrapper root (WORKON_HOME)"
+  :type 'list
+  :group 'pydiscover)
 
 (defun get-candidate-python-interpreters (dir)
   "Find all candidate `pythonX.Y' interpreters in a directory."
@@ -67,13 +75,14 @@
 (defun get-path-components ()
   (delete-dups (split-string (getenv "PATH") path-separator)))
 
-(defun filter-pyenv-shim-dirs (dirs)
-  "Remove all pyenv shim directories from `dirs'."
-  (seq-filter
-   '(lambda (dir)
-      ;; TODO switch to "begins with PYENV_ROOT"
-     (not (string= (file-name-base dir) "shims")))
-   dirs))
+(defun filter-pyenv-dirs (dirs)
+  "Remove all pyenv directories from `dirs'."
+  (let ((pyenv-dir (get-pyenv-dir)))
+    (if pyenv-dir
+        (seq-filter
+         `(lambda (dir)
+            (not (string-match-p ,(regexp-quote pyenv-dir) dir)))
+         dirs))))
 
 (defun get-candidate-python-interpreters-in-path ()
   "Find all candidate `pythonX.Y' interpreters in the $PATH.
@@ -81,11 +90,11 @@
 This is used to discover system directories.
 
 TODO this doesn't filter out if a conda env is already on the
-path.
+path unless that conda env is within pyenv.
 "
   (mapcan
    'get-candidate-python-interpreters
-   (filter-pyenv-shim-dirs (get-path-components))))
+   (filter-pyenv-dirs (get-path-components))))
 
 (defun get-system-dirs ()
   (delete-dups
@@ -96,13 +105,29 @@ path.
        (string-join `(,(file-name-directory interp) ".."))))
     (get-candidate-python-interpreters-in-path))))
 
+(defun get-interpreters-in-dirs (dirs)
+  (mapcan
+   (lambda (dir)
+     (delete-dups
+      (cl-map
+       'list
+       (lambda (interp) (file-truename interp))
+       (get-candidate-python-interpreters (string-join `(,dir "/" "bin"))))))
+   dirs))
+
+(defun get-system-interpreters ()
+  (get-interpreters-in-dirs (get-system-dirs)))
+
+;; TODO
+;; (defun get-dirs-from-interpreters ())
+
 (defun get-virtualenvwrapper-dir ()
   "Get the base directory containing venvs for virtualenvwrapper.
 
 If one doesn't exist, returns nil."
   (getenv "WORKON_HOME"))
 
-(defun get-virtualenvwrapper-paths ()
+(defun get-virtualenvwrapper-dirs ()
   "Get the full path to each venv under virtualenvwrapper."
   (let ((virtualenvwrapper-dir (get-virtualenvwrapper-dir)))
     (if virtualenvwrapper-dir
@@ -113,6 +138,12 @@ If one doesn't exist, returns nil."
           '(lambda (envname)
             (not (member envname pydiscover-virtualenvwrapper-ignore-names)))
           (directory-files virtualenvwrapper-dir nil directory-files-no-dot-files-regexp))))))
+
+;; TODO the symlink resolution is bad because they point back to system
+;; interpreters.
+;;
+;; (defun get-virtualenvwrapper-interpreters ()
+;;   (get-interpreters-in-dirs (get-virtualenvwrapper-dirs)))
 
 (defun get-pyenv-dir ()
   "Figure out the base directory containing a pyenv install.
@@ -140,6 +171,14 @@ If one doesn't exist, returns nil."
    nil
    directory-files-no-dot-files-regexp))
 
+(defun get-pyenv-interpreters ()
+  (let ((pyenv-dir (get-pyenv-dir)))
+    (get-interpreters-in-dirs
+     (cl-map
+      'list
+      (lambda (version) (concat pyenv-dir "/versions/" version))
+      (get-pyenv-versions pyenv-dir)))))
+
 (defun slurp (filename)
   "https://stackoverflow.com/a/20747279/"
   (with-temp-buffer
@@ -155,35 +194,92 @@ If one doesn't exist, returns nil."
     (if (file-exists-p conda-environments-filename)
         (slurp-lines conda-environments-filename))))
 
-;; TODO
+(defalias 'get-conda-dirs 'read-conda-environments-file)
+
+(defun get-conda-interpreters ()
+  (get-interpreters-in-dirs (get-conda-dirs)))
+
+;; (setq pyenv-version-base-dirs
+;;       (cl-map
+;;        'list
+;;        (lambda (version) (concat pyenv-dir "/versions/" version))
+;;        (get-pyenv-versions pyenv-dir)))
+
+;; (setq conda-base-dirs-in-pyenv
+;;       (seq-filter
+;;        (lambda (pyenv-base-dir) (is-conda-dir pyenv-base-dir))
+;;        pyenv-version-base-dirs))
+
+;; (setq conda-envs-in-pyenv
+;;       (mapcan
+;;        (lambda
+;;          (conda-base-dir)
+;;          (seq-filter
+;;           (lambda
+;;             (candidate-conda-env-dir)
+;;             (not (string-match-p (regexp-quote ".conda_envs_dir_test") candidate-conda-env-dir)))
+;;           (directory-files (concat conda-base-dir "/envs") t directory-files-no-dot-files-regexp)))
+;;        conda-base-dirs-in-pyenv))
+
+(defun is-conda-dir-inside-pyenv (dir)
+  "Is this a conda directory inside of a pyenv directory?"
+  (and (is-pyenv-dir dir)
+       (is-conda-dir dir)))
+
+(defun is-conda-dir (dir)
+  "Is this a conda directory?"
+  (directory-files dir nil "conda-meta"))
+
+(defun is-pyenv-dir (dir)
+  "Is this a pyenv directory?"
+  (string-match-p (regexp-quote (get-pyenv-dir)) dir))
+
+(defun is-system-dir (dir)
+  "Is this a system directory?"
+  (member dir (get-system-dirs)))
+
 (defun detect-env-type (dir)
   "Given the base directory of an environment, figure out what kind of environment it is."
   (if (file-exists-p dir)
       (cond
-        (t 'system))))
+       ((is-conda-dir-inside-pyenv dir) 'conda-in-pyenv)
+       ((is-conda-dir dir) 'conda)
+       ((is-pyenv-dir dir) 'pyenv)
+       ((is-system-dir dir) 'system)
+       (t nil))))
 
-(defun make-record-from-dir (dir &optional env-type)
-  `(:env-type ,(if (not (null env-type)) env-type (detect-env-type dir))
-    :env-name ,(file-name-nondirectory dir)
-    :env-full-base-path ,dir))
+(defun make-record-from-interpreter (interp-path &optional env-type)
+  (let ((dir (expand-file-name (string-join `(,(file-name-directory interp-path) "..") "/"))))
+    `(:interp-name ,(file-name-nondirectory interp-path)
+      :env-type ,(if (not (null env-type)) env-type (detect-env-type dir))
+      :env-name ,(file-name-nondirectory dir)
+      :inter-full-path ,interp-path
+      :env-full-base-path ,dir)))
 
-(defun get-virtualenvwrapper-environments ()
-  "Get records for all virtualenvwrapper environments."
-  (let ((virtualenvwrapper-dir (get-virtualenvwrapper-dir)))
-    (if virtualenvwrapper-dir
-        (cl-map 'list
-                (lambda (dir) (make-record-from-dir dir 'virtualenvwrapper))
-                (get-virtualenvwrapper-paths)))))
+(defun make-records-from-interpreters (interpreters)
+  (cl-map
+   'list
+   (lambda (interp-path)
+     (make-record-from-interpreter interp-path))
+   interpreters))
 
-(defun get-pyenv-environments ()
+(defun get-system-records ()
+  "Get records for all system 'environments'."
+  (make-records-from-interpreters (get-system-interpreters)))
+
+;; (defun get-virtualenvwrapper-records ()
+;;   "Get records for all virtualenvwrapper environments."
+;;   (let ((virtualenvwrapper-dir (get-virtualenvwrapper-dir)))
+;;     (if virtualenvwrapper-dir
+;;         (cl-map 'list
+;;                 (lambda (dir) (make-record-from-dir dir 'virtualenvwrapper))
+;;                 (get-virtualenvwrapper-dirs)))))
+
+(defun get-pyenv-records ()
   "Get records for all pyenv environments."
-  (let ((pyenv-dir (get-pyenv-dir)))
-    (if pyenv-dir
-        (cl-map 'list
-                (lambda (dir) (make-record-from-dir dir 'pyenv))
-                (get-pyenv-versions pyenv-dir)))))
+  (make-records-from-interpreters (get-pyenv-interpreters)))
 
-(defun get-conda-environments ()
+(defun get-conda-records ()
   "Get records for all conda environments."
   (let ((conda-environment-dirs (read-conda-environments-file)))
     (if conda-environment-dirs
@@ -191,15 +287,16 @@ If one doesn't exist, returns nil."
                 (lambda (dir) (make-record-from-dir dir 'conda))
                 conda-environment-dirs))))
 
-(defun get-base-directories ()
+(defun get-all-records ()
   "Get records for all discovered environments."
   (cl-concatenate
    'list
-   (get-virtualenvwrapper-environments)
+   ;; (get-system-records)
+   ;; (get-virtualenvwrapper-environments)
    (get-pyenv-environments)
    (get-conda-environments)))
 
-(defun list-base-directories ()
+(defun list-records ()
   (interactive)
   (with-output-to-temp-buffer
     "*pydiscover*"
@@ -211,7 +308,7 @@ If one doesn't exist, returns nil."
                         (plist-get dir :env-type)
                         pydiscover-sep
                         (plist-get dir :env-name)))
-              (get-base-directories))
+              (get-all-records))
       "\n"))))
 
 ;;;###autoload
