@@ -39,6 +39,11 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+
+(require 'dash)
+(require 'f)
+
 (defgroup pydiscover nil
   "Python interpreter and environment discovery and management for Emacs."
   :group 'python)
@@ -73,7 +78,13 @@
    "^python\\([[:digit:]]\\(\.[[:digit:]]\\)?\\)?$"))
 
 (defun get-path-components ()
-  (delete-dups (split-string (getenv "PATH") path-separator)))
+  "Get all components of $PATH.
+
+Duplicates are removed and elements that don't exist as
+directories are filtered out."
+  (seq-filter
+   'f-directory-p
+   (delete-dups (split-string (getenv "PATH") path-separator))))
 
 (defun filter-pyenv-dirs (dirs)
   "Remove all pyenv directories from `dirs'."
@@ -97,6 +108,7 @@ path unless that conda env is within pyenv.
    (filter-pyenv-dirs (get-path-components))))
 
 (defun get-system-dirs ()
+  "Get (base) system directories that contain Python interpreters in subdirs."
   (delete-dups
    (cl-map
     'list
@@ -106,6 +118,7 @@ path unless that conda env is within pyenv.
     (get-candidate-python-interpreters-in-path))))
 
 (defun get-interpreters-in-dirs (dirs)
+  "Get all Python interpreters in each `bin' subdir of DIRS."
   (mapcan
    (lambda (dir)
      (delete-dups
@@ -116,10 +129,8 @@ path unless that conda env is within pyenv.
    dirs))
 
 (defun get-system-interpreters ()
+  "Get all system-installed Python interpreters."
   (get-interpreters-in-dirs (get-system-dirs)))
-
-;; TODO
-;; (defun get-dirs-from-interpreters ())
 
 (defun get-virtualenvwrapper-dir ()
   "Get the base directory containing venvs for virtualenvwrapper.
@@ -139,11 +150,10 @@ If one doesn't exist, returns nil."
             (not (member envname pydiscover-virtualenvwrapper-ignore-names)))
           (directory-files virtualenvwrapper-dir nil directory-files-no-dot-files-regexp))))))
 
-;; TODO the symlink resolution is bad because they point back to system
-;; interpreters.
-;;
-;; (defun get-virtualenvwrapper-interpreters ()
-;;   (get-interpreters-in-dirs (get-virtualenvwrapper-dirs)))
+(defun get-virtualenvwrapper-interpreters ()
+  "Get all virtualenvwrapper-installed Python interpreters."
+  (-difference (get-interpreters-in-dirs (get-virtualenvwrapper-dirs))
+               (get-system-interpreters)))
 
 (defun get-pyenv-dir ()
   "Figure out the base directory containing a pyenv install.
@@ -172,6 +182,7 @@ If one doesn't exist, returns nil."
    directory-files-no-dot-files-regexp))
 
 (defun get-pyenv-interpreters ()
+  "Get all pyenv-installed Python interpreters."
   (let ((pyenv-dir (get-pyenv-dir)))
     (get-interpreters-in-dirs
      (cl-map
@@ -180,12 +191,15 @@ If one doesn't exist, returns nil."
       (get-pyenv-versions pyenv-dir)))))
 
 (defun slurp (filename)
-  "https://stackoverflow.com/a/20747279/"
+  "Read the contents of the text file FILENAME into a string.
+
+https://stackoverflow.com/a/20747279/"
   (with-temp-buffer
       (insert-file-contents-literally filename)
     (buffer-string)))
 
 (defun slurp-lines (filename)
+  "Read the contents of the text file FILENAME, splitting on newlines into a list."
   (split-string (slurp filename) "\n"))
 
 (defun read-conda-environments-file ()
@@ -267,13 +281,9 @@ If one doesn't exist, returns nil."
   "Get records for all system 'environments'."
   (make-records-from-interpreters (get-system-interpreters)))
 
-;; (defun get-virtualenvwrapper-records ()
-;;   "Get records for all virtualenvwrapper environments."
-;;   (let ((virtualenvwrapper-dir (get-virtualenvwrapper-dir)))
-;;     (if virtualenvwrapper-dir
-;;         (cl-map 'list
-;;                 (lambda (dir) (make-record-from-dir dir 'virtualenvwrapper))
-;;                 (get-virtualenvwrapper-dirs)))))
+(defun get-virtualenvwrapper-records ()
+  "Get records for all virtualenvwrapper environments."
+  (make-records-from-interpreters (get-virtualenvwrapper-interpreters)))
 
 (defun get-pyenv-records ()
   "Get records for all pyenv environments."
@@ -281,20 +291,16 @@ If one doesn't exist, returns nil."
 
 (defun get-conda-records ()
   "Get records for all conda environments."
-  (let ((conda-environment-dirs (read-conda-environments-file)))
-    (if conda-environment-dirs
-        (cl-map 'list
-                (lambda (dir) (make-record-from-dir dir 'conda))
-                conda-environment-dirs))))
+  (make-records-from-interpreters (get-conda-interpreters)))
 
 (defun get-all-records ()
   "Get records for all discovered environments."
   (cl-concatenate
    'list
-   ;; (get-system-records)
-   ;; (get-virtualenvwrapper-environments)
-   (get-pyenv-environments)
-   (get-conda-environments)))
+   (get-system-records)
+   (get-virtualenvwrapper-records)
+   (get-pyenv-records)
+   (get-conda-records)))
 
 (defun list-records ()
   (interactive)
