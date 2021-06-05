@@ -240,31 +240,36 @@ Blank lines are preserved."
 ;;           (directory-files (concat conda-base-dir "/envs") t directory-files-no-dot-files-regexp)))
 ;;        conda-base-dirs-in-pyenv))
 
-(defun is-conda-dir-inside-pyenv (dir)
-  "Is this a conda directory inside of a pyenv directory?"
-  (and (is-pyenv-dir dir)
-       (is-conda-dir dir)))
+(defun is-system-dir (dir)
+  "Is this a system directory?"
+  (member dir (get-system-dirs)))
 
-(defun is-conda-dir (dir)
-  "Is this a conda directory?"
-  (directory-files dir nil "conda-meta"))
+(defun is-virtualenvwrapper-dir (dir)
+  "Is this a virtualenvwrapper directory?"
+  (f-ancestor-of? (get-virtualenvwrapper-dir) dir))
 
 (defun is-pyenv-dir (dir)
   "Is this a pyenv directory?"
   (string-match-p (regexp-quote (get-pyenv-dir)) dir))
 
-(defun is-system-dir (dir)
-  "Is this a system directory?"
-  (member dir (get-system-dirs)))
+(defun is-conda-dir (dir)
+  "Is this a conda directory?"
+  (directory-files dir nil "conda-meta"))
+
+(defun is-conda-dir-inside-pyenv (dir)
+  "Is this a conda directory inside of a pyenv directory?"
+  (and (is-pyenv-dir dir)
+       (is-conda-dir dir)))
 
 (defun detect-env-type (dir)
   "Given the base directory of an environment, figure out what kind of environment it is."
   (if (file-exists-p dir)
       (cond
-       ((is-conda-dir-inside-pyenv dir) 'conda-in-pyenv)
-       ((is-conda-dir dir) 'conda)
-       ((is-pyenv-dir dir) 'pyenv)
        ((is-system-dir dir) 'system)
+       ((is-virtualenvwrapper-dir dir) 'venv)
+       ((is-pyenv-dir dir) 'pyenv)
+       ((is-conda-dir dir) 'conda)
+       ((is-conda-dir-inside-pyenv dir) 'conda-in-pyenv)
        (t nil))))
 
 (defun make-record-from-interpreter (interp-path &optional env-type)
