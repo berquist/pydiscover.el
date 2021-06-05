@@ -199,14 +199,19 @@ https://stackoverflow.com/a/20747279/"
     (buffer-string)))
 
 (defun slurp-lines (filename)
-  "Read the contents of the text file FILENAME, splitting on newlines into a list."
+  "Read the contents of the text file FILENAME, splitting on newlines into a list.
+
+Blank lines are preserved."
   (split-string (slurp filename) "\n"))
 
 (defun read-conda-environments-file ()
   (let ((conda-environments-filename
           (expand-file-name "~/.conda/environments.txt")))
     (if (file-exists-p conda-environments-filename)
-        (slurp-lines conda-environments-filename))))
+        ;; Deal with a possible trailing newline.
+        (seq-filter
+         (lambda (line) (> (length line) 0))
+         (slurp-lines conda-environments-filename)))))
 
 (defalias 'get-conda-dirs 'read-conda-environments-file)
 
