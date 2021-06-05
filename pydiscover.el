@@ -272,9 +272,23 @@ Blank lines are preserved."
        ((is-conda-dir-inside-pyenv dir) 'conda-in-pyenv)
        (t nil))))
 
+(defun get-python-interpreter-version (interpreter)
+  ;; ^Python (\d+)\.(\d+)\.(\d+)(a|b|rc)?(\d*)
+  (let* ((python-version-raw-string
+          (shell-command-to-string (format "%s --version" interpreter)))
+         (python-version-regex
+          "^[JP]ython \\([[:digit:]]+\\)\.\\([[:digit:]]+\\)\.\\([[:digit:]]+\\)\\(a\\|b\\|rc\\)?\\([[:digit:]]*\\)")
+         (matches (rest (s-match python-version-regex python-version-raw-string)))
+         (main-version (s-join "." (-slice matches 0 3)))
+         (dev-version-components (-slice matches 3)))
+    (if dev-version-components
+        (concat main-version (s-join "" dev-version-components))
+      main-version)))
+
 (defun make-record-from-interpreter (interp-path &optional env-type)
   (let ((dir (expand-file-name (string-join `(,(file-name-directory interp-path) "..") "/"))))
     `(:interp-name ,(file-name-nondirectory interp-path)
+      :interp-version ,(get-python-interpreter-version interp-path)
       :env-type ,(if (not (null env-type)) env-type (detect-env-type dir))
       :env-name ,(file-name-nondirectory dir)
       :inter-full-path ,interp-path
