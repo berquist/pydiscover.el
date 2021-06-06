@@ -134,20 +134,23 @@ path unless that conda env is within pyenv.
        (string-join `(,(file-name-directory interp) ".."))))
     (get-candidate-python-interpreters-in-path))))
 
-(defun get-interpreters-in-dirs (dirs)
+(defun get-interpreters-in-dirs (dirs get-realpath)
   "Get all Python interpreters in each `bin' subdir of DIRS."
   (mapcan
    (lambda (dir)
      (delete-dups
       (cl-map
        'list
-       (lambda (interp) (file-truename interp))
+       (lambda (interp)
+         (if get-realpath
+             (file-truename interp)
+           interp))
        (get-candidate-python-interpreters (string-join `(,dir "/" "bin"))))))
    dirs))
 
 (defun get-system-interpreters ()
   "Get all system-installed Python interpreters."
-  (get-interpreters-in-dirs (get-system-dirs)))
+  (get-interpreters-in-dirs (get-system-dirs) t))
 
 (defun get-virtualenvwrapper-dir ()
   "Get the base directory containing venvs for virtualenvwrapper.
@@ -169,8 +172,7 @@ If one doesn't exist, returns nil."
 
 (defun get-virtualenvwrapper-interpreters ()
   "Get all virtualenvwrapper-installed Python interpreters."
-  (-difference (get-interpreters-in-dirs (get-virtualenvwrapper-dirs))
-               (get-system-interpreters)))
+  (get-interpreters-in-dirs (get-virtualenvwrapper-dirs) nil))
 
 (defun get-pyenv-dir ()
   "Figure out the base directory containing a pyenv install.
@@ -205,7 +207,8 @@ If one doesn't exist, returns nil."
      (cl-map
       'list
       (lambda (version) (concat pyenv-dir "/versions/" version))
-      (get-pyenv-versions pyenv-dir)))))
+      (get-pyenv-versions pyenv-dir))
+     t)))
 
 (defun slurp (filename)
   "Read the contents of the text file FILENAME into a string.
@@ -233,7 +236,7 @@ Blank lines are preserved."
 (defalias 'get-conda-dirs 'read-conda-environments-file)
 
 (defun get-conda-interpreters ()
-  (get-interpreters-in-dirs (get-conda-dirs)))
+  (get-interpreters-in-dirs (get-conda-dirs) t))
 
 (defun get-python-version-from-conda-dir (dir)
   "Get the Python version from a conda environment base directory.
