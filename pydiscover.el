@@ -294,9 +294,9 @@ env as a CPython one."
       (cond
        ((is-system-dir dir) 'system)
        ((is-virtualenvwrapper-dir dir) 'venv)
+       ((is-conda-dir-inside-pyenv dir) 'conda-in-pyenv)
        ((is-pyenv-dir dir) 'pyenv)
        ((is-conda-dir dir) 'conda)
-       ((is-conda-dir-inside-pyenv dir) 'conda-in-pyenv)
        (t nil))))
 
 (defun get-env-basedir-from-interpreter-path (interpreter-path)
@@ -326,11 +326,11 @@ env as a CPython one."
          ((eq 'system env-type) nil)
          ;; TODO ???
          ((eq 'venv env-type) nil)
+         ;; TODO ???
+         ((eq 'conda-in-pyenv env-type) nil)
          ;; TODO can parse from $PYENV_VERSION?
          ((eq 'pyenv env-type) nil)
          ((eq 'conda env-type) (get-python-version-from-conda-dir env-basedir))
-         ;; TODO ???
-         ((eq 'conda-in-pyenv env-type) nil)
          (t nil)))))
 
 (defun get-python-version-from-env-structure (interpreter-path)
