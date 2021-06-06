@@ -70,6 +70,23 @@
   :type 'list
   :group 'pydiscover)
 
+(defconst python-version-regex "\\([[:digit:]]+\\)\.\\([[:digit:]]+\\)\.\\([[:digit:]]+\\)\\(a\\|b\\|rc\\)?\\([[:digit:]]*\\)"
+  "A regular expression for parsing Python version numbers.
+
+Handles versions like:
+   3.9.0
+   3.9.0a1
+   3.9.0b2
+   3.9.0rc1
+Does not handle versions like:
+   3.9.0.final.0
+   3.9.0.alpha.1
+   3.9.0.beta.2
+   3.9.0.candidate.1
+
+TODO handle two digit version numbers
+")
+
 (defun get-candidate-python-interpreters (dir)
   "Find all candidate `pythonX.Y' interpreters in a directory."
   (directory-files
@@ -218,6 +235,16 @@ Blank lines are preserved."
 (defun get-conda-interpreters ()
   (get-interpreters-in-dirs (get-conda-dirs)))
 
+(defun get-python-version-from-conda-dir (dir)
+  "Get the Python version from a conda environment base directory.
+
+Look in the DIR/conda-meta directory for the JSON entry
+corresponding to the core CPython interpreter package.
+
+TODO this won't detect a PyPy interpreter installed in the same
+env as a CPython one."
+  (nth 1 (s-split "-" (first (directory-files (format "%s/%s" dir "conda-meta") nil "^python-[[:digit:]]")))))
+
 ;; (setq pyenv-version-base-dirs
 ;;       (cl-map
 ;;        'list
@@ -261,7 +288,7 @@ Blank lines are preserved."
   (and (is-pyenv-dir dir)
        (is-conda-dir dir)))
 
-(defun detect-env-type (dir)
+(defun detect-env-type-from-basedir (dir)
   "Given the base directory of an environment, figure out what kind of environment it is."
   (if (file-exists-p dir)
       (cond
@@ -272,24 +299,50 @@ Blank lines are preserved."
        ((is-conda-dir-inside-pyenv dir) 'conda-in-pyenv)
        (t nil))))
 
-(defun get-python-interpreter-version (interpreter)
+(defun get-env-basedir-from-interpreter-path (interpreter-path)
+  (format "%s/../.." interpreter-path))
+
+(defun detect-env-type-from-interpreter-path (interpreter-path)
+  (detect-env-type-from-basedir (get-env-basedir-from-interpreter-path interpreter-path)))
+
+(defun get-python-version-from-executing-interpreter (interpreter-path)
+  "Get Python interpreter version by parsing 'INTERPRETER-PATH --version'."
   ;; ^Python (\d+)\.(\d+)\.(\d+)(a|b|rc)?(\d*)
   (let* ((python-version-raw-string
-          (shell-command-to-string (format "%s --version" interpreter)))
-         (python-version-regex
-          "^[JP]ython \\([[:digit:]]+\\)\.\\([[:digit:]]+\\)\.\\([[:digit:]]+\\)\\(a\\|b\\|rc\\)?\\([[:digit:]]*\\)")
-         (matches (rest (s-match python-version-regex python-version-raw-string)))
+          (shell-command-to-string (format "%s --version" interpreter-path)))
+         (python-version-full-regex (format "^[JP]ython %s" python-version-regex))
+         (matches (rest (s-match python-version-full-regex python-version-raw-string)))
          (main-version (s-join "." (-slice matches 0 3)))
          (dev-version-components (-slice matches 3)))
     (if dev-version-components
         (concat main-version (s-join "" dev-version-components))
       main-version)))
 
+(defun get-python-version-from-env-structure-by-type (interpreter-path env-type)
+  (let ((env-basedir (get-env-basedir-from-interpreter-path interpreter-path)))
+    (if (file-exists-p env-basedir)
+        (cond
+         ;; TODO parse directly from the filename.
+         ((eq 'system env-type) nil)
+         ;; TODO ???
+         ((eq 'venv env-type) nil)
+         ;; TODO can parse from $PYENV_VERSION?
+         ((eq 'pyenv env-type) nil)
+         ((eq 'conda env-type) (get-python-version-from-conda-dir env-basedir))
+         ;; TODO ???
+         ((eq 'conda-in-pyenv env-type) nil)
+         (t nil)))))
+
+(defun get-python-version-from-env-structure (interpreter-path)
+  "Get Python interpreter version by looking up environment-specific information."
+  (let ((env-type (detect-env-type-from-interpreter-path interpreter-path)))
+    (get-python-version-from-env-structure-by-type interpreter-path env-type)))
+
 (defun make-record-from-interpreter (interp-path &optional env-type)
   (let ((dir (expand-file-name (string-join `(,(file-name-directory interp-path) "..") "/"))))
     `(:interp-name ,(file-name-nondirectory interp-path)
-      :interp-version ,(get-python-interpreter-version interp-path)
-      :env-type ,(if (not (null env-type)) env-type (detect-env-type dir))
+      :interp-version ,(get-python-version-from-env-structure interp-path)
+      :env-type ,(if (not (null env-type)) env-type (detect-env-type-from-basedir dir))
       :env-name ,(file-name-nondirectory dir)
       :inter-full-path ,interp-path
       :env-full-base-path ,dir)))
