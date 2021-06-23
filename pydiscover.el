@@ -70,6 +70,11 @@
   :type 'list
   :group 'pydiscover)
 
+(defconst python-executable-regex "^python\\([[:digit:]]\\(\.[[:digit:]]+\\)?\\)?$"
+  "A regular expression for matching CPython interpreter executables.
+
+This expects all path components to be stripped off the front.")
+
 (defconst python-version-regex "\\([[:digit:]]+\\)\.\\([[:digit:]]+\\)\.\\([[:digit:]]+\\)\\(a\\|b\\|rc\\)?\\([[:digit:]]*\\)"
   "A regular expression for parsing Python version numbers.
 
@@ -92,7 +97,28 @@ TODO handle two digit version numbers
   (directory-files
    dir
    t
-   "^python\\([[:digit:]]\\(\.[[:digit:]]\\)?\\)?$"))
+   python-executable-regex))
+
+(defun get-best-python-interpreters-from-candidates (candidates)
+  "Given a number Python interpreter CANDIDATES, return the best ones.
+
+For example,
+    '(\"python\", \"python3\", \"python3.9\") => '(\"python3.9\")
+    '(\"python\", \"python3\")                => '(\"python3\")
+    '(\"python\")                             => '(\"python\")
+    '(\"python3.9\" \"python3.8\" \"python\") => '(\"python3.9\" \"python3.8\")
+
+If the CANDIDATES contain full path information, assume that each
+are in the same base directory/environment."
+  (let* ((parsed-candidates
+          (mapcar (lambda (c) (s-match python-executable-regex (f-filename c))) candidates))
+         (num-candidates (length parsed-candidates))
+         (candidate-indices (number-sequence 0 (- num-candidates 1)))))
+  (cons (car
+         (-sort '(lambda (c1 c2)
+                   (> (length (s-match python-executable-regex (f-filename c1)))
+                      (length (s-match python-executable-regex (f-filename c2)))))
+                candidates)) nil))
 
 (defun get-path-components ()
   "Get all components of $PATH.
@@ -246,7 +272,7 @@ corresponding to the core CPython interpreter package.
 
 TODO this won't detect a PyPy interpreter installed in the same
 env as a CPython one."
-  (nth 1 (s-split "-" (first (directory-files (format "%s/%s" dir "conda-meta") nil "^python-[[:digit:]]")))))
+  (nth 1 (s-split "-" (car (directory-files (format "%s/%s" dir "conda-meta") nil "^python-[[:digit:]]")))))
 
 ;; (setq pyenv-version-base-dirs
 ;;       (cl-map
@@ -390,10 +416,14 @@ env as a CPython one."
      (string-join
       (cl-map 'list
               (lambda (dir)
-                (format "%s%s%s"
+                (format "%s%s%s%s%s%s%s"
                         (plist-get dir :env-type)
                         pydiscover-sep
-                        (plist-get dir :env-name)))
+                        (plist-get dir :env-name)
+                        pydiscover-sep
+                        (plist-get dir :interp-version)
+                        pydiscover-sep
+                        (plist-get dir :interp-name)))
               (get-all-records))
       "\n"))))
 
