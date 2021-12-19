@@ -99,6 +99,11 @@ TODO handle two digit version numbers
    t
    python-executable-regex))
 
+(defun collect (grp)
+  (if (= (length grp) 1)
+      grp
+    (--filter (nth 1 it) grp)))
+
 (defun get-best-python-interpreters-from-candidates (candidates)
   "Given a number Python interpreter CANDIDATES, return the best ones.
 
@@ -110,15 +115,32 @@ For example,
 
 If the CANDIDATES contain full path information, assume that each
 are in the same base directory/environment."
-  (let* ((parsed-candidates
-          (mapcar (lambda (c) (s-match python-executable-regex (f-filename c))) candidates))
-         (num-candidates (length parsed-candidates))
-         (candidate-indices (number-sequence 0 (- num-candidates 1)))))
-  (cons (car
-         (-sort '(lambda (c1 c2)
-                   (> (length (s-match python-executable-regex (f-filename c1)))
-                      (length (s-match python-executable-regex (f-filename c2)))))
-                candidates)) nil))
+  (let* ((raw-parsed-candidates
+          (mapcar (lambda (c) (s-match python-executable-regex (f-filename c)))
+                  candidates))
+         (num-raw-candidates (length raw-parsed-candidates))
+         (candidate-indices (number-sequence 0 (- num-raw-candidates 1)))
+         (parsed-candidates
+          (--filter (not (equal (nth 0 it) nil))
+                    (--zip-with (cons it other) (--map (nth 1 it) raw-parsed-candidates) candidate-indices)))
+         (split-candidates
+          (--map (list (car (s-match "^[0-9]+" (car it)))
+                    (cadr (s-match "^[0-9]+\.\\([0-9]+\\)$" (car it)))
+                    (cdr it))
+                 parsed-candidates))
+         (candidates-grouped-by-major-version
+          (--group-by (car it) split-candidates))
+         )
+    ;; For each major version,
+    ;; - if there is only one match, keep it,
+    ;; - else, take all that contain the maximal amount of version
+    ;;   information.  Since there is only one possible appearance of the
+    ;;   interpreter with the major version but no minor version present, in
+    ;;   practice this means that all major.minor version entries are kept,
+    ;;   and if a major-only version entry exists, ignore it. This also means
+    ;;   that if, for example, the only matches are "python3" and "python3.9",
+    ;;   and "python3" isn't actually 3.9, that match will be lost.
+    (--map (nth it candidates) (--map (nth 2 it) (-flatten-n 1 (cl-loop for grp in candidates-grouped-by-major-version collect (collect (cdr grp))))))))
 
 (defun get-path-components ()
   "Get all components of $PATH.
