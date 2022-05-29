@@ -5,8 +5,8 @@
 ;; Author: Eric Berquist <eric.berquist@gmail.com>
 ;; Version: 0.0.1
 ;; Keywords: extensions
-;; URL: 
-;; Package-Requires: ((emacs "24"))
+;; URL:
+;; Package-Requires: ((emacs "24") (dash "2.19.1") (f "0.20.0"))
 ;;
 ;; This file is not a part of GNU Emacs.
 ;;
@@ -70,7 +70,7 @@
   :type 'list
   :group 'pydiscover)
 
-(defconst python-executable-regex "^python\\([[:digit:]]\\(\.[[:digit:]]+\\)?\\)?$"
+(defconst pydiscover-python-executable-regex "^python\\([[:digit:]]\\(\.[[:digit:]]+\\)?\\)?$"
   "A regular expression for matching CPython interpreter executables.
 
 This expects all path components to be stripped off the front.")
@@ -93,54 +93,64 @@ TODO handle two digit version numbers
 ")
 
 (defun get-candidate-python-interpreters (dir)
-  "Find all candidate `pythonX.Y' interpreters in a directory."
+  "Find all candidate `pythonX.Y' interpreters in directory DIR."
   (directory-files
    dir
    t
-   python-executable-regex))
+   pydiscover-python-executable-regex))
 
-(defun collect (grp)
-  (if (= (length grp) 1)
-      grp
-    (--filter (nth 1 it) grp)))
+(defun raw-parse-candidates (candidates)
+  (mapcar (lambda (c) (s-match pydiscover-python-executable-regex (f-filename c)))
+          candidates))
+
+(defun parse-candidates (raw-parsed-candidates)
+  (let ((candidate-indices (number-sequence 0 (1- (length raw-parsed-candidates)))))
+    (--zip-with (cons it other)
+                (mapcar (lambda (c) (nth 1 c))
+                        raw-parsed-candidates)
+                candidate-indices)))
+
+(defun make-entries (parsed-candidates)
+  (mapcar (lambda (it)
+            (list (if (car it) (car (s-match "^[0-9]+" (car it))))
+                  (if (car it) (cadr (s-match "^[0-9]+\.\\([0-9]+\\)$" (car it))))
+                  (cdr it))) 
+          parsed-candidates))
+
+(defun group-by (entries)
+  (--group-by (car it) entries))
+
+(defun minor-ver-comp (v1 v2)
+  (let ((i1 (if (stringp v1) (string-to-number v1) -1))
+        (i2 (if (stringp v2) (string-to-number v2) -1)))
+    (> i1 i2)))
+
+(defun sorted-groups (groups)
+  (mapcar (lambda (grp)
+            (-sort (lambda (e1 e2) (minor-ver-comp (cadr e1) (cadr e2))) (cdr grp)))
+          groups))
 
 (defun get-best-python-interpreters-from-candidates (candidates)
   "Given a number Python interpreter CANDIDATES, return the best ones.
 
-For example,
-    '(\"python\", \"python3\", \"python3.9\") => '(\"python3.9\")
-    '(\"python\", \"python3\")                => '(\"python3\")
-    '(\"python\")                             => '(\"python\")
-    '(\"python3.9\" \"python3.8\" \"python\") => '(\"python3.9\" \"python3.8\")
-
 If the CANDIDATES contain full path information, assume that each
 are in the same base directory/environment."
-  (let* ((raw-parsed-candidates
-          (mapcar (lambda (c) (s-match python-executable-regex (f-filename c)))
-                  candidates))
-         (num-raw-candidates (length raw-parsed-candidates))
-         (candidate-indices (number-sequence 0 (- num-raw-candidates 1)))
-         (parsed-candidates
-          (--filter (not (equal (nth 0 it) nil))
-                    (--zip-with (cons it other) (--map (nth 1 it) raw-parsed-candidates) candidate-indices)))
-         (split-candidates
-          (--map (list (car (s-match "^[0-9]+" (car it)))
-                    (cadr (s-match "^[0-9]+\.\\([0-9]+\\)$" (car it)))
-                    (cdr it))
-                 parsed-candidates))
-         (candidates-grouped-by-major-version
-          (--group-by (car it) split-candidates))
-         )
-    ;; For each major version,
-    ;; - if there is only one match, keep it,
-    ;; - else, take all that contain the maximal amount of version
-    ;;   information.  Since there is only one possible appearance of the
-    ;;   interpreter with the major version but no minor version present, in
-    ;;   practice this means that all major.minor version entries are kept,
-    ;;   and if a major-only version entry exists, ignore it. This also means
-    ;;   that if, for example, the only matches are "python3" and "python3.9",
-    ;;   and "python3" isn't actually 3.9, that match will be lost.
-    (--map (nth it candidates) (--map (nth 2 it) (-flatten-n 1 (cl-loop for grp in candidates-grouped-by-major-version collect (collect (cdr grp))))))))
+  ;; For each major version,
+  ;; - if there is only one match, keep it,
+  ;; - else, take all that contain the maximal amount of version
+  ;;   information.  Since there is only one possible appearance of the
+  ;;   interpreter with the major version but no minor version present, in
+  ;;   practice this means that all major.minor version entries are kept,
+  ;;   and if a major-only version entry exists, ignore it. This also means
+  ;;   that if, for example, the only matches are "python3" and "python3.9",
+  ;;   and "python3" isn't actually 3.9, that match will be lost.
+  (let ((grouped-sorted-candidates (-> candidates
+                                       raw-parse-candidates
+                                       parse-candidates
+                                       make-entries
+                                       group-by
+                                       sorted-groups)))
+    grouped-sorted-candidates))
 
 (defun get-path-components ()
   "Get all components of $PATH.
@@ -152,7 +162,7 @@ directories are filtered out."
    (delete-dups (split-string (getenv "PATH") path-separator))))
 
 (defun filter-pyenv-dirs (dirs)
-  "Remove all pyenv directories from `dirs'."
+  "Remove all pyenv directories from DIRS."
   (let ((pyenv-dir (get-pyenv-dir)))
     (if pyenv-dir
         (seq-filter
@@ -215,7 +225,7 @@ If one doesn't exist, returns nil."
          (lambda (envname) (format "%s/%s" virtualenvwrapper-dir envname))
          (seq-filter
           '(lambda (envname)
-            (not (member envname pydiscover-virtualenvwrapper-ignore-names)))
+             (not (member envname pydiscover-virtualenvwrapper-ignore-names)))
           (directory-files virtualenvwrapper-dir nil directory-files-no-dot-files-regexp))))))
 
 (defun get-virtualenvwrapper-interpreters ()
@@ -231,15 +241,15 @@ If one doesn't exist, returns nil."
         (pyenv-dir-win (expand-file-name "~/.pyenv/pyenv-win"))
         (pyenv-dir-nix (expand-file-name "~/.pyenv")))
     (cond
-      ((and (not (null pyenv-dir-user-1))
-            (file-directory-p pyenv-dir-user-1))
-       (expand-file-name pyenv-dir-user-1))
-      ((and (not (null pyenv-dir-user-2))
-            (file-directory-p pyenv-dir-user-2))
-       (expand-file-name pyenv-dir-user-2))
-      ((file-directory-p pyenv-dir-win) pyenv-dir-win)
-      ((file-directory-p pyenv-dir-nix) pyenv-dir-nix)
-      (t nil))))
+     ((and (not (null pyenv-dir-user-1))
+           (file-directory-p pyenv-dir-user-1))
+      (expand-file-name pyenv-dir-user-1))
+     ((and (not (null pyenv-dir-user-2))
+           (file-directory-p pyenv-dir-user-2))
+      (expand-file-name pyenv-dir-user-2))
+     ((file-directory-p pyenv-dir-win) pyenv-dir-win)
+     ((file-directory-p pyenv-dir-nix) pyenv-dir-nix)
+     (t nil))))
 
 ;; TODO proper path separators
 (defun get-pyenv-versions (dir)
@@ -263,7 +273,7 @@ If one doesn't exist, returns nil."
 
 https://stackoverflow.com/a/20747279/"
   (with-temp-buffer
-      (insert-file-contents-literally filename)
+    (insert-file-contents-literally filename)
     (buffer-string)))
 
 (defun slurp-lines (filename)
@@ -274,7 +284,7 @@ Blank lines are preserved."
 
 (defun read-conda-environments-file ()
   (let ((conda-environments-filename
-          (expand-file-name "~/.conda/environments.txt")))
+         (expand-file-name "~/.conda/environments.txt")))
     (if (file-exists-p conda-environments-filename)
         ;; Deal with a possible trailing newline.
         (seq-filter
@@ -287,7 +297,7 @@ Blank lines are preserved."
   (get-interpreters-in-dirs (get-conda-dirs) t))
 
 (defun get-python-version-from-conda-dir (dir)
-  "Get the Python version from a conda environment base directory.
+  "Get the Python version from a conda environment base directory DIR.
 
 Look in the DIR/conda-meta directory for the JSON entry
 corresponding to the core CPython interpreter package.
@@ -319,28 +329,28 @@ env as a CPython one."
 ;;        conda-base-dirs-in-pyenv))
 
 (defun is-system-dir (dir)
-  "Is this a system directory?"
+  "Is DIR a system directory?"
   (member dir (get-system-dirs)))
 
 (defun is-virtualenvwrapper-dir (dir)
-  "Is this a virtualenvwrapper directory?"
+  "Is DIR a virtualenvwrapper directory?"
   (f-ancestor-of? (get-virtualenvwrapper-dir) dir))
 
 (defun is-pyenv-dir (dir)
-  "Is this a pyenv directory?"
+  "Is DIR a pyenv directory?"
   (string-match-p (regexp-quote (get-pyenv-dir)) dir))
 
 (defun is-conda-dir (dir)
-  "Is this a conda directory?"
+  "Is DIR a conda directory?"
   (directory-files dir nil "conda-meta"))
 
 (defun is-conda-dir-inside-pyenv (dir)
-  "Is this a conda directory inside of a pyenv directory?"
+  "Is DIR a conda directory inside of a pyenv directory?"
   (and (is-pyenv-dir dir)
        (is-conda-dir dir)))
 
 (defun detect-env-type-from-basedir (dir)
-  "Given the base directory of an environment, figure out what kind of environment it is."
+  "Figure out the environment type at base directory DIR."
   (if (file-exists-p dir)
       (cond
        ((is-system-dir dir) 'system)
@@ -362,7 +372,7 @@ env as a CPython one."
   (let* ((python-version-raw-string
           (shell-command-to-string (format "%s --version" interpreter-path)))
          (python-version-full-regex (format "^[JP]ython %s" python-version-regex))
-         (matches (rest (s-match python-version-full-regex python-version-raw-string)))
+         (matches (cdr (s-match python-version-full-regex python-version-raw-string)))
          (main-version (s-join "." (-slice matches 0 3)))
          (dev-version-components (-slice matches 3)))
     (if dev-version-components
@@ -406,7 +416,7 @@ env as a CPython one."
    interpreters))
 
 (defun get-system-records ()
-  "Get records for all system 'environments'."
+  "Get records for all system \"environments\"."
   (make-records-from-interpreters (get-system-interpreters)))
 
 (defun get-virtualenvwrapper-records ()
@@ -433,7 +443,7 @@ env as a CPython one."
 (defun list-records ()
   (interactive)
   (with-output-to-temp-buffer
-    "*pydiscover*"
+      "*pydiscover*"
     (princ
      (string-join
       (cl-map 'list
@@ -448,9 +458,6 @@ env as a CPython one."
                         (plist-get dir :interp-name)))
               (get-all-records))
       "\n"))))
-
-;;;###autoload
-;; TODO: Entry-function goes here
 
 
 (provide 'pydiscover)
