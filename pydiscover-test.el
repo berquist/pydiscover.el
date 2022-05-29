@@ -177,7 +177,65 @@
 ;;                    "/usr/bin/python3.8"
 ;;                    "/usr/bin/python3.9"))))
 
-;; (ert-deftest test-get-python-version-from-env-structure ()
-;;   (should (equal (get-python-version-from-env-structure))))
+;; (ert-deftest test-get-python-version-from-executing-interpreter/system ()
+;;   (should (equal (get-python-version-from-executing-interpreter "/usr/bin/python3.10")
+;;                  "3.10.4"))
+;;   (should (equal (get-python-version-from-executing-interpreter "/usr/bin/python2.7")
+;;                  "2.7.18")))
+
+(ert-deftest test-get-python-version-from-env-structure/system ()
+  (should (equal (get-python-version-from-env-structure "/usr/bin/python3.10")
+                 nil))
+  (should (equal (get-python-version-from-env-structure "/usr/bin/python2.7")
+                 nil))
+  (should (equal (get-python-version-from-env-structure "/usr/bin/python")
+                 nil)))
+
+;; (ert-deftest test-get-python-version-from-executing-interpreter/venv ()
+;;   (should (equal (get-python-version-from-executing-interpreter "/home/eric/data/virtualenvs/autodiff/bin/python")
+;;                  "3.10.4"))
+;;   (should (equal (get-python-version-from-executing-interpreter "/home/eric/data/virtualenvs/cclib_custom/bin/python3.8")
+;;                  "3.10.4")))
+
+(ert-deftest test-get-python-version-from-env-structure/venv ()
+  (should (equal (get-python-version-from-env-structure "/home/eric/data/virtualenvs/autodiff/bin/python")
+                 nil))
+  (should (equal (get-python-version-from-env-structure "/home/eric/data/virtualenvs/cclib_custom/bin/python3.8")
+                 nil)))
+
+;; (ert-deftest test-get-python-version-from-executing-interpreter/conda ()
+;;   (should (equal (get-python-version-from-executing-interpreter "/home/eric/.julia/conda/3/bin/python3.8")
+;;                  "3.8.5")))
+
+(ert-deftest test-get-python-version-from-env-structure/conda ()
+  (should (equal (get-python-version-from-env-structure "/home/eric/.julia/conda/3/bin/python3.8")
+                 "3.8.5")))
+
+;; (ert-deftest test-get-python-version-from-executing-interpreter/pyenv ()
+;;   (should (equal (get-python-version-from-executing-interpreter "/home/eric/.pyenv/versions/pypy3.6-7.3.1/bin/pypy3")
+;;                  "3.6.9")))
+
+(ert-deftest test-get-python-version-from-env-structure/pyenv ()
+  (should (equal (get-python-version-from-env-structure "/home/eric/.pyenv/versions/pypy3.6-7.3.1/bin/pypy3")
+                 nil)))
+
+;; (ert-deftest test-get-python-version-from-executing-interpreter/conda-in-pyenv ()
+;;   (should (equal (get-python-version-from-executing-interpreter "/home/eric/.pyenv/versions/miniconda3-4.7.12/envs/pyresponse_37/bin/python3.7")
+;;                  "3.7.12")))
+
+(ert-deftest test-get-python-version-from-env-structure/conda-in-pyenv ()
+  (should (equal (get-python-version-from-env-structure "/home/eric/.pyenv/versions/miniconda3-4.7.12/envs/pyresponse_37/bin/python3.7")
+                 nil)))
+
+(ert-deftest test-get-env-basedir-from-interpreter-path ()
+  (should (equal (get-env-basedir-from-interpreter-path "/usr/bin/python3.10" t)
+                 "/usr"))
+  (should (equal (get-env-basedir-from-interpreter-path "/usr/bin/python" t)
+                 "/usr"))
+  ;; (should (equal (get-env-basedir-from-interpreter-path )))
+  ;; (should (equal (get-env-basedir-from-interpreter-path )))
+  ;; (should (equal (get-env-basedir-from-interpreter-path )))
+  ;; (should (equal (get-env-basedir-from-interpreter-path )))
+  )
 
 (provide 'pydiscover-test)

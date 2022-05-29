@@ -360,8 +360,38 @@ env as a CPython one."
        ((is-conda-dir dir) 'conda)
        (t nil))))
 
-(defun get-env-basedir-from-interpreter-path (interpreter-path)
-  (format "%s/../.." interpreter-path))
+(defun get-env-basedir-from-interpreter-path (interpreter-path &optional resolve)
+  "TODO
+
+This assumes that the location of the interpreter is always of
+the form `/path/to/basedir/bin/pythonX.Y', returning
+`/path/to/basedir' (unresolved)."
+  (let ((env-basedir (format "%s/../.." interpreter-path)))
+    (if resolve
+        (file-truename env-basedir)
+      env-basedir)))
+
+(defun get-python-version-from-parsing-sysconfigdata (interpreter-path)
+  "Get Python interpreter version by searching through sysconfigdata.
+
+Specifically, given `/path/to/bin/pythonX.Y', search through
+`/path/to/lib/pythonX.Y/*sysconfig*.py'.
+
+INTERPRETER-PATH may be a symlink, and its true path is resolved
+internally."
+  (let* ((interpreter-realpath (file-truename interpreter-path))
+         (path-version (cadr (s-match pydiscover-python-executable-regex (f-filename interpreter-realpath))))
+         (interpreter-basedir (get-env-basedir-from-interpreter-path interpreter-realpath))
+         (lib-dir (f-join interpreter-basedir "lib" (format "python%s" path-version)))
+         (sysconfigdata-path (car (f-glob "*sysconfigdata*.py" lib-dir))))
+    (if sysconfigdata-path
+        (let ((match-components (s-match
+                                 (format "Python-%s" python-version-regex)
+                                 (seq-find (lambda (line) (s-matches-p "COVERAGE_INFO" line))
+                                           (slurp-lines sysconfigdata-path)))))
+          (s-join "." (-slice match-components 1 4)))
+      ;; Fall back to the version parsed directly from the path.
+      path-version)))
 
 (defun detect-env-type-from-interpreter-path (interpreter-path)
   (detect-env-type-from-basedir (get-env-basedir-from-interpreter-path interpreter-path)))
@@ -383,15 +413,14 @@ env as a CPython one."
   (let ((env-basedir (get-env-basedir-from-interpreter-path interpreter-path)))
     (if (file-exists-p env-basedir)
         (cond
-         ;; TODO parse directly from the filename.
-         ((eq 'system env-type) nil)
+         ((eq env-type 'system) (get-python-version-from-parsing-sysconfigdata env-basedir))
          ;; TODO ???
-         ((eq 'venv env-type) nil)
+         ((eq env-type 'venv) nil)
          ;; TODO ???
-         ((eq 'conda-in-pyenv env-type) nil)
+         ((eq env-type 'conda-in-pyenv) nil)
          ;; TODO can parse from $PYENV_VERSION?
-         ((eq 'pyenv env-type) nil)
-         ((eq 'conda env-type) (get-python-version-from-conda-dir env-basedir))
+         ((eq env-type 'pyenv) nil)
+         ((eq env-type 'conda) (get-python-version-from-conda-dir env-basedir))
          (t nil)))))
 
 (defun get-python-version-from-env-structure (interpreter-path)
