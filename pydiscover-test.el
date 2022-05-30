@@ -177,6 +177,50 @@
 ;;                    "/usr/bin/python3.8"
 ;;                    "/usr/bin/python3.9"))))
 
+;; FIXME Everything below here depends on running local to my development machine.
+
+(ert-deftest test-get-env-basedir-from-interpreter-path/venv ()
+  (should (equal (get-env-basedir-from-interpreter-path "/home/eric/data/virtualenvs/autodiff/bin/python")
+                 "/home/eric/data/virtualenvs/autodiff"))
+  (should (equal (get-env-basedir-from-interpreter-path "/home/eric/data/virtualenvs/cclib_custom/bin/python3.8")
+                 "/home/eric/data/virtualenvs/cclib_custom")))
+
+(ert-deftest test-get-env-basedir-from-interpreter-path/conda ()
+  (should (equal (get-env-basedir-from-interpreter-path "/home/eric/.julia/conda/3/bin/python3.8")
+                 "/home/eric/.julia/conda/3")))
+
+(ert-deftest test-get-env-basedir-from-interpreter-path/pyenv ()
+  (should (equal (get-env-basedir-from-interpreter-path "/home/eric/.pyenv/versions/pypy3.6-7.3.1/bin/pypy3")
+                 "/home/eric/.pyenv/versions/pypy3.6-7.3.1")))
+
+(ert-deftest test-get-env-basedir-from-interpreter-path/conda-in-pyenv ()
+  (should (equal (get-env-basedir-from-interpreter-path "/home/eric/.pyenv/versions/miniconda3-4.7.12/envs/pyresponse_37/bin/python3.7")
+                 "/home/eric/.pyenv/versions/miniconda3-4.7.12/envs/pyresponse_37")))
+
+(ert-deftest test-detect-env-type-from-basedir/system ()
+  (should (equal (detect-env-type-from-basedir "/usr")
+                 'system)))
+
+(ert-deftest test-detect-env-type-from-basedir/venv ()
+  (should (equal (detect-env-type-from-basedir "/home/eric/data/virtualenvs/autodiff")
+                 'venv)))
+
+(ert-deftest test-detect-env-type-from-basedir/conda ()
+  (should (equal (detect-env-type-from-basedir "/home/eric/.julia/conda/3")
+                 'conda)))
+
+(ert-deftest test-detect-env-type-from-basedir/pyenv ()
+  (should (equal (detect-env-type-from-basedir "/home/eric/.pyenv/versions/pypy3.6-7.3.1")
+                 'pyenv)))
+
+(ert-deftest test-detect-env-type-from-basedir/conda-in-pyenv ()
+  (should (equal (detect-env-type-from-basedir "/home/eric/.pyenv/versions/miniconda3-4.7.12/envs/pyresponse_37")
+                 'conda-in-pyenv)))
+
+(ert-deftest test-get-python-version-from-env-structure-by-type/system ()
+  (should (equal (get-python-version-from-env-structure-by-type "/usr/bin/python3.10" 'system)
+                 "3.10.4")))
+
 ;; (ert-deftest test-get-python-version-from-executing-interpreter/system ()
 ;;   (should (equal (get-python-version-from-executing-interpreter "/usr/bin/python3.10")
 ;;                  "3.10.4"))
@@ -185,11 +229,11 @@
 
 (ert-deftest test-get-python-version-from-env-structure/system ()
   (should (equal (get-python-version-from-env-structure "/usr/bin/python3.10")
-                 nil))
+                 "3.10.4"))
   (should (equal (get-python-version-from-env-structure "/usr/bin/python2.7")
-                 nil))
+                 "2.7.18"))
   (should (equal (get-python-version-from-env-structure "/usr/bin/python")
-                 nil)))
+                 "3.10.4")))
 
 ;; (ert-deftest test-get-python-version-from-executing-interpreter/venv ()
 ;;   (should (equal (get-python-version-from-executing-interpreter "/home/eric/data/virtualenvs/autodiff/bin/python")
@@ -199,9 +243,9 @@
 
 (ert-deftest test-get-python-version-from-env-structure/venv ()
   (should (equal (get-python-version-from-env-structure "/home/eric/data/virtualenvs/autodiff/bin/python")
-                 nil))
+                 "3.10.4"))
   (should (equal (get-python-version-from-env-structure "/home/eric/data/virtualenvs/cclib_custom/bin/python3.8")
-                 nil)))
+                 "3.10.4")))
 
 ;; (ert-deftest test-get-python-version-from-executing-interpreter/conda ()
 ;;   (should (equal (get-python-version-from-executing-interpreter "/home/eric/.julia/conda/3/bin/python3.8")
@@ -216,8 +260,12 @@
 ;;                  "3.6.9")))
 
 (ert-deftest test-get-python-version-from-env-structure/pyenv ()
-  (should (equal (get-python-version-from-env-structure "/home/eric/.pyenv/versions/pypy3.6-7.3.1/bin/pypy3")
-                 nil)))
+  (should (equal (get-python-version-from-env-structure "/home/eric/.pyenv/versions/3.7.5/bin/python")
+                 "3.7.5"))
+  ;; TODO pypy
+  ;; (should (equal (get-python-version-from-env-structure "/home/eric/.pyenv/versions/pypy3.6-7.3.1/bin/pypy3")
+  ;;                "3.6.9"))
+  )
 
 ;; (ert-deftest test-get-python-version-from-executing-interpreter/conda-in-pyenv ()
 ;;   (should (equal (get-python-version-from-executing-interpreter "/home/eric/.pyenv/versions/miniconda3-4.7.12/envs/pyresponse_37/bin/python3.7")
@@ -225,17 +273,12 @@
 
 (ert-deftest test-get-python-version-from-env-structure/conda-in-pyenv ()
   (should (equal (get-python-version-from-env-structure "/home/eric/.pyenv/versions/miniconda3-4.7.12/envs/pyresponse_37/bin/python3.7")
-                 nil)))
+                 "3.7.12")))
 
-(ert-deftest test-get-env-basedir-from-interpreter-path ()
-  (should (equal (get-env-basedir-from-interpreter-path "/usr/bin/python3.10" t)
+(ert-deftest test-get-env-basedir-from-interpreter-path/system ()
+  (should (equal (get-env-basedir-from-interpreter-path "/usr/bin/python3.10")
                  "/usr"))
-  (should (equal (get-env-basedir-from-interpreter-path "/usr/bin/python" t)
-                 "/usr"))
-  ;; (should (equal (get-env-basedir-from-interpreter-path )))
-  ;; (should (equal (get-env-basedir-from-interpreter-path )))
-  ;; (should (equal (get-env-basedir-from-interpreter-path )))
-  ;; (should (equal (get-env-basedir-from-interpreter-path )))
-  )
+  (should (equal (get-env-basedir-from-interpreter-path "/usr/bin/python")
+                 "/usr")))
 
 (provide 'pydiscover-test)

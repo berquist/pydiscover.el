@@ -182,15 +182,17 @@ path unless that conda env is within pyenv.
    'get-candidate-python-interpreters
    (filter-pyenv-dirs (get-path-components))))
 
+;; (defun get-system-dirs ()
+;;   "Get (base) system directories that contain Python interpreters in subdirs."
+;;   (delete-dups
+;;    (cl-map
+;;     'list
+;;     (lambda (interp)
+;;       (expand-file-name
+;;        (string-join `(,(file-name-directory interp) ".."))))
+;;     (get-candidate-python-interpreters-in-path))))
 (defun get-system-dirs ()
-  "Get (base) system directories that contain Python interpreters in subdirs."
-  (delete-dups
-   (cl-map
-    'list
-    (lambda (interp)
-      (expand-file-name
-       (string-join `(,(file-name-directory interp) ".."))))
-    (get-candidate-python-interpreters-in-path))))
+  '("/usr" "/usr/local"))
 
 (defun get-interpreters-in-dirs (dirs get-realpath)
   "Get all Python interpreters in each `bin' subdir of DIRS."
@@ -360,16 +362,13 @@ env as a CPython one."
        ((is-conda-dir dir) 'conda)
        (t nil))))
 
-(defun get-env-basedir-from-interpreter-path (interpreter-path &optional resolve)
+(defun get-env-basedir-from-interpreter-path (interpreter-path)
   "TODO
 
 This assumes that the location of the interpreter is always of
 the form `/path/to/basedir/bin/pythonX.Y', returning
-`/path/to/basedir' (unresolved)."
-  (let ((env-basedir (format "%s/../.." interpreter-path)))
-    (if resolve
-        (file-truename env-basedir)
-      env-basedir)))
+`/path/to/basedir' (unresolved but expanded)."
+  (expand-file-name (format "%s/../.." interpreter-path)))
 
 (defun get-python-version-from-parsing-sysconfigdata (interpreter-path)
   "Get Python interpreter version by searching through sysconfigdata.
@@ -413,14 +412,16 @@ internally."
   (let ((env-basedir (get-env-basedir-from-interpreter-path interpreter-path)))
     (if (file-exists-p env-basedir)
         (cond
-         ((eq env-type 'system) (get-python-version-from-parsing-sysconfigdata env-basedir))
-         ;; TODO ???
-         ((eq env-type 'venv) nil)
-         ;; TODO ???
-         ((eq env-type 'conda-in-pyenv) nil)
-         ;; TODO can parse from $PYENV_VERSION?
-         ((eq env-type 'pyenv) nil)
-         ((eq env-type 'conda) (get-python-version-from-conda-dir env-basedir))
+         ((eq env-type 'system)
+          (get-python-version-from-parsing-sysconfigdata interpreter-path))
+         ((eq env-type 'venv)
+          (get-python-version-from-parsing-sysconfigdata interpreter-path))
+         ((eq env-type 'conda-in-pyenv)
+          (get-python-version-from-conda-dir env-basedir))
+         ((eq env-type 'pyenv)
+          (get-python-version-from-parsing-sysconfigdata interpreter-path))
+         ((eq env-type 'conda)
+          (get-python-version-from-conda-dir env-basedir))
          (t nil)))))
 
 (defun get-python-version-from-env-structure (interpreter-path)
